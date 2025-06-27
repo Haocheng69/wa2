@@ -2,12 +2,12 @@ This is a chaotic, physics-based space simulation built with p5.js, featuring pl
 Users can create and destroy planetary systems, adjust gravity, trigger cosmic disasters, and watch orbital madness unfold — all in a fun and interactive way.
 This simulation is inspired by Newton's Law of Universal Gravitation, modeling how celestial bodies interact using simplified orbital physics.
 Real-world concepts simulated include:
-Orbital mechanics (planets orbiting stars)
-Gravity-based attraction
-Comet impacts and collisions
-Black holes and accretion
-Moon orbits around planets
-Merging of planetary bodies
+Orbital mechanics (planets orbiting stars),
+Gravity-based attraction,
+ Comet impacts and collisions,
+ Black holes and accretion,
+ Moon orbits around planets,
+ Merging of planetary bodies,
 
 
 | Class       | Description                                                                                                               |
@@ -33,15 +33,15 @@ Merging of planetary bodies
 | `??`                | Opens a joke translation of instructions.     |
 
  Features
-Sun: Fixed at the center; attracts planets.
-Planets: Orbit the Sun. May spawn with moons. Can merge with each other.
-Moons: Orbit planets with velocity adjustments.
-Comets: Spawn periodically or manually. May shrink/destroy planets on impact.
-Black Hole: Pulls all objects. Grows by absorbing mass. Can be removed.
-Doomsday: Spawns a comet that destroys the Sun.
-Comet Shower: Spawns 15 comets rapidly.
-Gravity Slider: Adjust the gravitational constant G (try max for chaos).
-❓ "??" Button: Opens a cursed goofy translation of the instructions.
+   Sun: Fixed at the center; attracts planets.
+   Planets: Orbit the Sun. May spawn with moons. Can merge with each other.
+   Moons: Orbit planets with velocity adjustments.
+   Comets: Spawn periodically or manually. May shrink/destroy planets on impact.
+   Black Hole: Pulls all objects. Grows by absorbing mass. Can be removed.
+   Doomsday: Spawns a comet that destroys the Sun.
+   Comet Shower: Spawns 15 comets rapidly.
+   Gravity Slider: Adjust the gravitational constant G (try max for chaos).
+   ❓ "??" Button: Opens a cursed goofy translation of the instructions.
 
 
 
