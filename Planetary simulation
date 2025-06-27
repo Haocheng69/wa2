@@ -1,1 +1,672 @@
+let sun;
+let planets = []; // Array of Body objects (planets)
+let comets = []; // Array of Comet objects
+let G = 1; //Gravitational constant in this simulation, adjustable via slider
+let mode = 0; // 0 = Start, 1 = Simulation, 2 = Instructions, 3 = Goofy translation
+let blackHole = null;
 
+let removeButton, spawnButton, doomsdayButton;
+let startButton, resetButton;
+let instructionsButton;
+let wierdbutton;
+let gravitySlider;
+let cometShowerButton; 
+
+let lastCometSpawnTime = 0;
+let cometSpawnInterval = 4000;
+let doomsdayTriggered = false;
+let flashAlpha = 0; //For visual flash effect during doomsday comet
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  textFont('Arial', 32);
+
+  startButton = createButton('Start Simulation');
+  startButton.position(width / 2 - 60, height / 2 + 120);
+  startButton.mousePressed(startSimulation);
+  startButton.hide();
+
+  spawnButton = createButton("Spawn Black Hole");
+  spawnButton.position(10, 10);
+  spawnButton.mousePressed(spawnBlackHole);
+  spawnButton.hide();
+
+  removeButton = createButton("Remove Black Hole");
+  removeButton.position(10, 40);
+  removeButton.mousePressed(() => {
+    if (blackHole) blackHole.startFading();
+  });
+  removeButton.hide();
+
+  resetButton = createButton("Reset");
+  resetButton.position(10, 70);
+  resetButton.mousePressed(resetSimulation);
+  resetButton.hide();
+
+  doomsdayButton = createButton("Doomsday");
+  doomsdayButton.position(10, 100);
+  doomsdayButton.mousePressed(triggerDoomsday);
+  doomsdayButton.hide();
+  
+  cometShowerButton = createButton("Comet Shower");
+  cometShowerButton.position(10,200);
+  cometShowerButton.mousePressed(triggerCometShower);
+  cometShowerButton.hide();
+  
+  instructionsButton = createButton("Instructions");
+  instructionsButton.position(width/2 -45, height/2 + 150);
+  instructionsButton.mousePressed(() => {
+    mode = 2;
+  });
+instructionsButton.show();
+  
+  wierdbutton=createButton("??");
+  wierdbutton.position(width/2+260,height-46);
+  wierdbutton.mousePressed(translationpage);
+  wierdbutton.show();
+  
+  gravitySlider = createSlider(0.1, 3, 1, 0.01);
+  gravitySlider.position(10, 140);  // adjust position as needed
+  gravitySlider.style('width', '150px');
+  gravitySlider.hide(); 
+  
+  gravityLabel = createP("Slide to change the gravitational constant");
+  gravityLabel.position(10, 150);
+  gravityLabel.style('color', 'white');
+  gravityLabel.style('font-size', '14px');
+  gravityLabel.hide();
+}
+
+function startSimulation() {
+  mode = 1;
+  startButton.hide();
+  instructionsButton.hide();
+  wierdbutton.hide();
+  gravityLabel.show();
+  cometShowerButton.show();
+  gravitySlider.show();
+
+  sun = new Body(width / 2, height / 2, 30, true); //Create the central sun(fixed body)
+  //Create 8 random planets with orbital velocity using circular orbit formula: v = sqrt(G * M / r) where M is the central mass (sun)
+  for (let i = 0; i < 8; i++) {
+    let angle = random(TWO_PI);
+    let dist = random(100, 300);
+    let x = sun.pos.x + cos(angle) * dist;
+    let y = sun.pos.y + sin(angle) * dist;
+    let planet = new Body(x, y, random(7, 12));
+    let dir = createVector(-(y - sun.pos.y), x - sun.pos.x).normalize();
+    let speed = sqrt(G * sun.mass / dist); //Orbital speed
+    planet.vel = dir.mult(speed);
+    planets.push(planet);
+
+    // Randomly add moons around the planet using same orbital logic
+    let moonCount = floor(random(0, 3));
+    for (let m = 0; m < moonCount; m++) {
+      let moonDist = random(planet.r * 2 + 10, planet.r * 4 + 20);
+      let moonAngle = random(TWO_PI);
+      let mx = planet.pos.x + cos(moonAngle) * moonDist;
+      let my = planet.pos.y + sin(moonAngle) * moonDist;
+
+      let moon = new Body(mx, my, random(2, 4));
+      moon.parent = planet;
+      let moonDir = createVector(-(my - planet.pos.y), mx - planet.pos.x).normalize();
+      let moonSpeed = sqrt(G * planet.mass / moonDist); //Orbital speed around planets
+      moon.vel = moonDir.mult(moonSpeed).add(planet.vel);
+      planet.moons.push(moon);
+    }
+  }
+
+  spawnButton.show();
+  resetButton.show();
+  doomsdayButton.show();
+  lastCometSpawnTime = millis();
+  spawnComet();
+}
+
+function resetSimulation() {
+  sun = null;
+  planets = [];
+  blackHole = null;
+  comets = [];
+  spawnButton.hide();
+  removeButton.hide();
+  resetButton.hide();
+  doomsdayButton.hide();
+  mode = 0;
+  doomsdayTriggered = false;
+  flashAlpha = 0;
+  startButton.show();
+  instructionsButton.show();
+  gravitySlider.hide();
+  gravityLabel.hide();
+  cometShowerButton.hide()
+}
+
+function draw() {
+  if (mode === 0) {
+    showStartScreen();
+  } else if (mode === 1) {
+    runSimulation();
+  } else if (mode === 2){
+    showInstructionsPage();
+  } else if(mode===3){
+    showtranslationpage();
+  }
+  
+    // Update G based on slider (affects all gravitational calculations)
+  if (gravitySlider && gravitySlider.elt.style.display !== 'none') {
+    G = gravitySlider.value();
+  }
+}
+
+//Starting screen
+function showStartScreen() {
+  background(0);
+  fill(255);
+  textAlign(CENTER, CENTER);
+  textSize(32);
+  text("Welcome to the Planetary Simulation", width / 2, height / 2 - 50);
+  textSize(16);
+  text("Press 'Start' to begin", width / 2, height / 2);
+  startButton.show();
+  instructionsButton.show();
+  wierdbutton.hide();
+  cometShowerButton.hide();
+}
+
+function runSimulation() {
+  if (!sun && !doomsdayTriggered) return;
+
+  background(50);
+
+  if (sun) sun.show();
+
+  // Periodically spawn comets based on time interval
+  if (millis() - lastCometSpawnTime > cometSpawnInterval) {
+    spawnComet();
+    lastCometSpawnTime = millis();
+  }
+
+  //Comet logic
+  for (let i = comets.length - 1; i >= 0; i--) {
+    let comet = comets[i];
+
+    // Apply gravitational attraction from black hole
+    if (blackHole && blackHole.active) {
+      let force = p5.Vector.sub(blackHole.pos, comet.pos);
+      let d = constrain(force.mag(), 10, 500);
+      let strength = (G * blackHole.mass) / (d * d);// Newton's law of gravitation: F = GM/r^2
+      force.setMag(strength);
+      comet.vel.add(force);
+    }
+
+    comet.update();
+    comet.show();
+
+    // Check if doomsday comet hits the sun
+    if (sun && comet.pos.dist(sun.pos) < comet.r + sun.r && comet.doomsday) {
+      sun = null;
+      comets.splice(i, 1);
+      flashAlpha = 255; // Trigger flash
+      continue;
+    }
+
+    //Check collisons with planets
+    for (let j = planets.length - 1; j >= 0; j--) {
+      let planet = planets[j];
+      let d = comet.pos.dist(planet.pos);
+      if (d < comet.r + planet.r) {
+        if (planet.mergeCount > 1) {
+          planet.mergeCount--;
+          planet.mass = 100 * planet.mergeCount; // Adjust base mass as needed
+          planet.r = sqrt(planet.mass * 2);
+        } else {
+          if (comet.r >= planet.r) {
+            planets.splice(j, 1);
+          } else {
+            planet.mass -= comet.r * 0.1;
+            planet.r = sqrt(planet.mass * 2);
+          }
+        }
+        comets.splice(i, 1);
+        break;
+      }
+    }
+
+    // Black hole absorbs comet
+    if (blackHole && blackHole.active && comet.pos.dist(blackHole.pos) < blackHole.r) {
+      blackHole.grow();
+      comets.splice(i, 1);
+      continue;
+    }
+
+    // Remove comets out of bounds
+    if (
+      comet.pos.x < -comet.r || comet.pos.x > width + comet.r ||
+      comet.pos.y < -comet.r || comet.pos.y > height + comet.r
+    ) {
+      comets.splice(i, 1);
+    }
+  }
+
+  for (let i = planets.length - 1; i >= 0; i--) {
+    let p = planets[i];
+    p.resetForce();
+    if (sun) p.attract(sun);
+    if (blackHole && blackHole.active) blackHole.attract(p);
+
+    // Planet-Planet attraction (only during Doomsday)
+    if (doomsdayTriggered) {
+      for (let j = 0; j < planets.length; j++) {
+        if (i !== j) p.attract(planets[j]);
+      }
+    }
+
+    // Planet merging if collision
+    for (let j = i - 1; j >= 0; j--) {
+      let other = planets[j];
+      let d = p.pos.dist(other.pos);
+      if (d < p.r + other.r) {
+        let larger = p.mass >= other.mass ? p : other;
+        let smaller = p.mass < other.mass ? p : other;
+        
+        // Conservation of momentum: (m1*v1 + m2*v2)/(m1 + m2)
+        larger.vel = p5.Vector.add(
+          p5.Vector.mult(larger.vel, larger.mass),
+          p5.Vector.mult(smaller.vel, smaller.mass)
+        ).div(larger.mass + smaller.mass);
+        
+        larger.mass += smaller.mass;
+        larger.mergeCount += smaller.mergeCount;
+        larger.r = sqrt(larger.mass * 2);larger.moons=larger.moons.concat(smaller.moons);
+        smaller.moons.forEach(moon => moon.parent = larger);
+        planets.splice(planets.indexOf(smaller), 1);
+        break;
+      }
+    }
+
+    p.update();
+    p.show();
+
+    //Moon logic
+    for (let m = p.moons.length - 1; m >= 0; m--) {
+      let moon = p.moons[m];
+      moon.resetForce();
+      moon.attract(p);
+      if (blackHole && blackHole.active) blackHole.attract(moon);
+      moon.update();
+
+      // Handle orbital bounce if moon too close
+      let distPM = moon.pos.dist(p.pos);
+      let minDist = p.r + moon.r + 2;
+      if (distPM < minDist) {
+        let overlap = minDist - distPM;
+        let pushDir = p5.Vector.sub(moon.pos, p.pos).normalize();
+        moon.pos.add(pushDir.mult(overlap));
+        
+         // Tangential orbiting velocity: v = sqrt(GM/r)
+        let radial = p5.Vector.sub(moon.pos, p.pos).normalize();
+        let tangent = createVector(-radial.y, radial.x);
+        let desiredSpeed = sqrt(G * p.mass / moon.pos.dist(p.pos));
+        moon.vel = tangent.mult(desiredSpeed).add(p.vel);
+      }
+
+      moon.show();
+
+       // Black hole 'eats' moon
+      if (blackHole && blackHole.active && moon.pos.dist(blackHole.pos) < blackHole.r) {
+        blackHole.grow();
+        p.moons.splice(m, 1);
+      }
+    }
+
+    // Black hole 'eats' planet
+    if (blackHole && blackHole.active && p.pos.dist(blackHole.pos) < blackHole.r) {
+      blackHole.grow();
+      planets.splice(i, 1);
+    }
+  }
+
+   // Draw black hole
+  if (blackHole) {
+    blackHole.update();
+    blackHole.show();
+  }
+
+  // Flash effect
+  if (flashAlpha > 0) {
+    fill(255, flashAlpha);
+    noStroke();
+    rect(0, 0, width, height);
+    flashAlpha -= 10;
+  }
+
+}
+
+function mousePressed() {
+  if (mode === 1) {
+    if (sun && dist(mouseX, mouseY, sun.pos.x, sun.pos.y) < sun.r + 10) return;
+
+    // Create new planet with orbital velocity: v = sqrt(GM/r)
+    let p = new Body(mouseX, mouseY, random(7, 12));
+    let dx = sun ? mouseX - sun.pos.x : 1;
+    let dy = sun ? mouseY - sun.pos.y : 0;
+    let v = createVector(-dy, dx).normalize();
+    let distToCenter = sun ? sqrt(dx * dx + dy * dy) : 200;
+    p.vel = v.mult(sqrt(G * (sun ? sun.mass : 1000) / distToCenter));
+
+    // Random moon generation for new planet
+    let moonCount = floor(random(0, 3));
+    for (let m = 0; m < moonCount; m++) {
+      let moonDist = random(p.r * 2 + 10, p.r * 4 + 20);
+      let moonAngle = random(TWO_PI);
+      let mx = p.pos.x + cos(moonAngle) * moonDist;
+      let my = p.pos.y + sin(moonAngle) * moonDist;
+
+      let moon = new Body(mx, my, random(2, 4));
+      moon.parent = p;
+      let moonDir = createVector(-(my - p.pos.y), mx - p.pos.x).normalize();
+      let moonSpeed = sqrt(G * p.mass / moonDist);
+      moon.vel = moonDir.mult(moonSpeed).add(p.vel);
+
+      p.moons.push(moon);
+    }
+
+    planets.push(p);
+  }
+}
+
+
+
+function spawnBlackHole() {
+  if (!blackHole || !blackHole.active) {
+    let x = random(100, width - 100);
+    let y = random(100, height - 100);
+    blackHole = new BlackHole(x, y, 30);
+    removeButton.show();
+  }
+}
+
+function spawnComet(doomsday = false) {
+  let edge = floor(random(4));  // Spawns from a random edge with initial velocity
+  let x, y, vx, vy;
+  let size = doomsday ? 100 : random(10, 30);
+  let speed = random(2, 5);
+
+  switch (edge) {
+    case 0:
+      x = -size;
+      y = random(50, height - 50);
+      vx = speed;
+      vy = 0;
+      break;
+    case 1:
+      x = width + size;
+      y = random(50, height - 50);
+      vx = -speed;
+      vy = 0;
+      break;
+    case 2:
+      x = random(50, width - 50);
+      y = -size;
+      vx = 0;
+      vy = speed;
+      break;
+    case 3:
+      x = random(50, width - 50);
+      y = height + size;
+      vx = 0;
+      vy = -speed;
+      break;
+  }
+
+  if (doomsday && sun) {
+    let dir = p5.Vector.sub(sun.pos, createVector(x, y)).normalize();
+    vx = dir.x * speed;
+    vy = dir.y * speed;
+  }
+
+  let comet = new Comet(x, y, size, vx, vy, doomsday);
+  comets.push(comet);
+}
+
+function triggerDoomsday() {
+  planets = [];
+  spawnComet(true);
+  doomsdayTriggered = true;
+}
+
+
+function showInstructionsPage() {
+  background(0);
+  fill(255);
+  textAlign(LEFT, TOP);
+  textSize(24);
+  text("Instructions!!??", 40, 30);
+  textSize(16);
+  text(`- Click "Start Simulation" to generate a solar system.
+- Click anywhere to add a planet. There is a chance that it spawns with moons and 
+actually successfully interact with them.
+- spawn black hole and remove it with the respective buttons
+- "Doomsday" button unleashes a massive(trust) comet toward the Sun and kills it.
+-Planets act wierdly during doomsday( skill issue❌, reality✅)
+- Comets are shown as🥔 and they destroy or shrink huge planets
+- Huge planets are formed from planets colliding
+- Moons orbit planets, and black holes attract all bodies.
+-There is a slider to change the G in the Newton's Law of Universal 
+Gravitation Formula
+-Comet shower spawns a lot of 🥔
+- Click "Reset" to restart the simulation.
+
+Enjoy exploring orbital chaos 🤡!`, 40, 70);
+
+  textAlign(CENTER, BOTTOM);
+  text("Press 'Start Simulation' to start the simulation. There is no reset button here ahaha", width / 2 - 10, height - 100);
+  text("note: everything here is the reality, its just astro, its not that deep",width/2-10,height-50);
+  text("note's note: theres an interesting but really useless button over here:", width/2-10, height-20);
+  instructionsButton.hide();
+  wierdbutton.show();
+}
+
+
+function translationpage(){
+  mode = 3;
+  startButton.hide();
+  instructionsButton.hide();
+}
+
+
+function showtranslationpage() {
+  background(10, 0, 30);
+  fill(0, 255, 255);
+  textAlign(LEFT, TOP);
+  textSize(24);
+  text(" Translasunary Protocol Activated ", 40, 30);
+
+  textSize(16);
+  fill(255, 200, 255);
+  text(`
+⚠ WARNING: Language module unstable. Skibidi mode activated...
+
+- Commence Stellar Combobulation via Start-o-tron.
+- Place orb-toys on canvas. They go prr prr (pataprim). 
+They sometimes bring baby orb-toys👶.
+- Black Hole = big ouchie black sucking sphere. Summon at your risk.
+- DOOMsphere 🥔 = Death Yam. Solar obliteration guaranteed. 
+It is NOT gluten-free.
+- Planet bonk = merge into MEGA orb. They love each other massively.
+- Lunar noodles orbit bigggger noodle. Cosmic pasta logic applies.
+- Reset the soup if chaos goes burrito.
+-Turn the G slider up and the universe go BOOOM! Turn the G slider down and everything becomes space soup.
+-Cosmic 🥔 rain causes a lot of 🥔 to rain...
+
+Remember: Trust no atom. They make up everything. HAHAHA
+`, 40, 80);
+
+  textAlign(CENTER, BOTTOM);
+  text("This is a stupid page with no back buttons hahah", width / 2, height - 40);
+  text("[All bad designs come with intention( trust 😭🙏)]", width / 2, height - 20);
+  wierdbutton.hide();
+}
+function triggerCometShower() {
+  for (let i = 0; i < 15; i++) {
+    spawnComet(false); // or spawnComet(random() < 0.2) if you want rare doomsday comets
+  }
+}
+
+class Body {
+  constructor(x, y, r, fixed = false) {
+    // Position vector in space
+    this.pos = createVector(x, y);
+    
+    // Velocity and acceleration vectors
+    this.vel = createVector(0, 0);
+    this.acc = createVector(0, 0);
+    
+     // Radius and mass of the body
+    this.r = r;
+    this.mass = r * r * 0.5; // Simulated mass proportional to area
+    
+    // Whether the body is fixed in place (e.g. the Sun)
+    this.fixed = fixed;
+    
+    // Trail stores the past positions to draw a motion path
+    this.trail = [];
+    this.col = fixed ? color('yellow') : color(random(100, 255), random(100, 255), random(100, 255));
+    
+    // For moons and hierarchical attraction:
+    this.moons = []; // Bodies that orbit this body
+    this.parent = null; // The body this moon orbits, if applicable
+    
+    this.mergeCount = 1; // Tracks how many planets have merged into this one
+  }
+
+   // Clears acceleration before force calculations
+  resetForce() {
+    this.acc.set(0, 0);
+  }
+
+   // Applies gravitational attraction from another body
+  attract(other) {
+    // Get direction vector from this to other
+    let force = p5.Vector.sub(other.pos, this.pos);
+    
+    // Limit distance to avoid extreme forces at very close range 
+    let d = constrain(force.mag(), 10, 500);
+    
+    // Newton's Law of Universal Gravitation: F = G * m1 * m2 / d^2
+    let strength = (G * this.mass * other.mass) / (d * d);
+    
+    // Set the magnitude of the force vector
+    force.setMag(strength);
+    this.acc.add(force.div(this.mass));
+  }
+
+  
+  // Updates velocity and position using current acceleration
+  update() {
+    if (this.fixed) return;
+    this.vel.add(this.acc);
+    this.pos.add(this.vel);
+    this.trail.push(this.pos.copy());
+    if (this.trail.length > 50) this.trail.shift();
+  }
+
+  
+  // Draws the orbit trail and the body itself
+  show() {
+    noFill();
+    stroke(200, 100);
+    beginShape();
+    for (let v of this.trail) vertex(v.x, v.y);
+    endShape();
+
+    fill(this.col);
+    noStroke();
+    ellipse(this.pos.x, this.pos.y, this.r * 2);
+  }
+}
+
+class BlackHole {
+  constructor(x, y, r) {
+    this.pos = createVector(x, y);  // Position in space
+    
+    // Radius and derived mass
+    this.r = r;
+    this.mass = r * r * 2;
+    
+    // Visual fade-out effects
+    this.opacity = 255;
+    this.fading = false;
+    this.active = true;
+  }
+
+  // Applies a strong gravitational attraction to another body
+  attract(other) {
+    
+    let force = p5.Vector.sub(this.pos, other.pos); // Compute direction vector to the other object
+    
+    let d = constrain(force.mag(), 10, 500); // Clamp distance to avoid infinity or unstable behavior
+    
+    let strength = (G * this.mass * other.mass) / (d * d); // Newton's Law of Universal Gravitation: F = G * m1 * m2 / d^2
+    
+    // Amplify force since it's a black hole 
+    force.setMag(strength * 2);
+    
+    other.acc.add(force.div(other.mass)); // Apply acceleration to the other object
+  }
+
+  // Increases size and mass when it consumes something
+  grow() {
+    this.r += 1.5;
+    this.mass = this.r * this.r * 2;
+  }
+
+  // Updates opacity and radius if it's fading away
+  update() {
+    if (this.fading) {
+      this.opacity -= 5; //Gradually becomes more transparent
+      this.r *= 0.98; //Gradually shrinks
+      if (this.opacity <= 0 || this.r < 1) {
+        this.active = false; // Becomes inactive once faded/shrunken enough
+        this.opacity = 0;
+        removeButton.hide(); // Hide the "Remove Black Hole" button from UI
+      }
+    }
+  }
+
+  // Begins the fading process
+  startFading() {
+    this.fading = true;
+  }
+
+  // Draws the black hole with current opacity and size
+  show() {
+    if (!this.active) return;
+    fill(0, this.opacity);
+    noStroke();
+    ellipse(this.pos.x, this.pos.y, this.r * 2);
+  }
+}
+
+class Comet {
+  constructor(x, y, r, vx, vy, doomsday = false) {
+    this.pos = createVector(x, y); // Position vector initialized with given coordinates
+    
+    this.vel = createVector(vx, vy);  // Velocity vector determines direction and speed of motion
+    
+    this.r = r; // Radius (used for collision and visual size)
+    
+    this.doomsday = doomsday;  // Flag to mark if this is a special "doomsday" comet(destroys the sun?)
+  }
+
+  //Updates comet's position by adding velocity
+  update() {
+    this.pos.add(this.vel);
+  }
+
+  show() {
+    textAlign(CENTER, CENTER);
+    text("🥔", this.pos.x, this.pos.y);
+  }
+}
